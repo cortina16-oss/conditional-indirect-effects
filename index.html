@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conditional Indirect Effects Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap">
+<style>
+/* Layout: two-pane workbench. Left = model specification + the two input matrices; right = live estimates, path diagram, equations, diagnostics. */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --sunk:#eef1f5; --ink:#18212d; --muted:#5a6677; --line:#d8dee7;
+  --accent:#2b6a66; --green:#2f8f4e; --red:#c0453f; --g0:#3c55b0; --g1:#a85c16; --pos:#2b6a66; --neg:#b2403b;
+  --f-display:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --f-body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#11151b; --surface:#192029; --sunk:#141a22; --ink:#e5e9ef; --muted:#97a2b2; --line:#2b3441;
+  --accent:#6cbdb5; --green:#5fcf85; --red:#f07b74; --g0:#93a7ff; --g1:#e4a35d; --pos:#6cbdb5; --neg:#ee8a84; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#11151b; --surface:#192029; --sunk:#141a22; --ink:#e5e9ef; --muted:#97a2b2; --line:#2b3441;
+  --accent:#6cbdb5; --green:#5fcf85; --red:#f07b74; --g0:#93a7ff; --g1:#e4a35d; --pos:#6cbdb5; --neg:#ee8a84; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;text-wrap:balance;margin:0;letter-spacing:-.005em}
+h1{font-size:1.9rem;line-height:1.15}
+h2{font-size:1.2rem}
+h3{font-size:1rem}
+p{margin:0}
+.lede{color:var(--muted);max-width:72ch}
+.eyebrow{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+.mono,.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start}
+@media (min-width:1060px){.grid{grid-template-columns:minmax(0,440px) minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+label{font-size:.85rem}
+select,input[type=number]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:5px 7px}
+select{width:100%}
+select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{font:inherit;font-size:.82rem;color:var(--accent);background:transparent;border:1px solid var(--line);border-radius:4px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+.presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.preset{text-align:left;display:flex;flex-direction:column;gap:2px;color:var(--ink);padding:9px 10px;background:var(--sunk)}
+.preset b{font-weight:600;font-size:.85rem}
+.preset span{font-size:.75rem;color:var(--muted)}
+.preset[aria-pressed="true"]{border-color:var(--accent);background:var(--surface);box-shadow:inset 3px 0 0 var(--accent)}
+.note{font-size:.84rem;color:var(--muted);border-left:2px solid var(--line);padding-left:10px}
+.note strong{color:var(--ink);font-weight:600}
+table{border-collapse:collapse;width:100%}
+.scroll{overflow-x:auto;min-width:0}
+.paths td,.paths th{padding:6px 6px;border-bottom:1px solid var(--line);text-align:left;font-size:.84rem;vertical-align:middle}
+.paths th{font-weight:600;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}
+.paths td.c{text-align:center}
+.req{font-size:.72rem;color:var(--muted)}
+.sym{font-family:var(--f-mono);color:var(--muted);margin-right:6px}
+.mat-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;padding:2px 8px;border-radius:99px;border:1px solid currentColor}
+.chip.g0{color:var(--g0)} .chip.g1{color:var(--g1)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+.mat{width:auto}
+.mat th{font-size:.74rem;font-weight:600;color:var(--muted);padding:3px 4px;text-align:center;white-space:nowrap}
+.mat th.rh{text-align:right;padding-right:8px;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+.mat td{padding:2px}
+.mat input{width:72px;text-align:right;font-family:var(--f-mono);font-size:.82rem;padding:4px 5px}
+.mat .fixed{width:72px;text-align:right;font-family:var(--f-mono);font-size:.82rem;padding:4px 6px;color:var(--muted);border-radius:4px}
+.mat tr.desc input{background:var(--sunk)}
+.mat tr.desc th{font-style:italic;font-weight:500}
+.mat tr.sep td{height:6px}
+.bad{color:var(--neg);font-size:.82rem}
+.n-in{width:72px}
+/* results */
+.headline{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.model-tag{font-family:var(--f-mono);font-size:.8rem;color:var(--accent);border:1px solid var(--line);background:var(--sunk);padding:3px 8px;border-radius:4px}
+.est th,.est td{padding:8px 8px;border-bottom:1px solid var(--line);text-align:right;font-size:.85rem;white-space:nowrap}
+.est th:first-child,.est td:first-child{text-align:left;white-space:normal}
+.est thead th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.est thead th.g0{color:var(--g0)} .est thead th.g1{color:var(--g1)}
+.est .ci{display:block;color:var(--muted);font-size:.76rem}
+.est tr.total td{font-weight:600}
+.est tr.direct td{color:var(--muted)}
+.est .sig{color:var(--ink);font-weight:600}
+.est tr.direct .sig{color:var(--ink)}
+.flag{font-size:.7rem;font-family:var(--f-body);font-weight:600;padding:1px 6px;border-radius:3px;background:var(--sunk);color:var(--muted);margin-left:4px}
+.flag.on{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+svg text{font-family:var(--f-body)}
+.fig{width:100%;height:auto;display:block}
+.eqs td,.eqs th{padding:5px 8px;border-bottom:1px solid var(--line);font-size:.82rem;text-align:right;white-space:nowrap}
+.eqs th:first-child,.eqs td:first-child{text-align:left}
+.eqs thead th{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.eqs caption{caption-side:top;text-align:left;font-weight:600;font-size:.86rem;padding:8px 0 4px}
+.eqs caption span{font-weight:400;color:var(--muted);font-family:var(--f-mono);font-size:.78rem;margin-left:8px}
+.checks{display:flex;flex-direction:column;gap:12px}
+.check{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;align-items:start}
+.badge{font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:3px;margin-top:2px;white-space:nowrap}
+.badge.ok{background:color-mix(in srgb,var(--pos) 18%,transparent);color:var(--pos)}
+.badge.warn{background:color-mix(in srgb,var(--g1) 20%,transparent);color:var(--g1)}
+.badge.info{background:var(--sunk);color:var(--muted)}
+.check p{font-size:.85rem}
+.check .rec{font-size:.75rem;color:var(--muted)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:var(--muted)}
+.foot{font-size:.78rem;color:var(--muted);max-width:90ch}
+.two{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+@media (min-width:760px){.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.math{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:12px}
+.mgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+@media (min-width:760px){.mgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.mcol{display:flex;flex-direction:column;gap:6px;align-items:flex-start;min-width:0}
+.mrow{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:8px;font-size:.84rem;width:100%}
+.mlab{color:var(--muted)}
+.mrow .num{overflow-wrap:anywhere}
+.mrow b{font-weight:600}
+.mat input.diff,.mat .fixed.diff{background:color-mix(in srgb,var(--green) 26%,var(--surface));border-color:color-mix(in srgb,var(--green) 55%,var(--line))}
+.mat input.same,.mat .fixed.same{background:color-mix(in srgb,var(--red) 14%,var(--surface))}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<style>body{margin:0;font-size:14px}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <span class="eyebrow">Models integrating mediation and moderation · dichotomous moderator W</span>
+    <h1>Conditional Indirect Effects Explorer</h1>
+    <p class="lede">In an indirect effect model, the effect of X on Y is at least partially transmitted by mediator M. Sometimes, one or more paths in this model are moderated, resulting in a <i>conditional indirect effect model</i>. Holland, Shore, &amp; Cortina (2017) call these Models Integrating Mediation and Moderation (MIMMs). If you really want to understand the math underlying these things, look no further than Edwards and Lambert (2007).</p>
+    <p class="lede">The purpose of this tool is to illustrate and explain some of the different types of conditional indirect effect model. You can manipulate the values in the input matrices below in order to see what happens to the output. The tool fits the regression equations implied by the model that you specify (with X×W or M×W product terms only on the paths you mark as moderated), then reports the indirect effect of X on Y at W&nbsp;=&nbsp;0 and W&nbsp;=&nbsp;1 and the difference between them. Examples follow the papers discussed in Holland, Shore &amp; Cortina (2017, <i>ORM</i>).</p>
+    <p class="lede">Just to keep things manageable, the moderators are assumed to be dichotomous. That way, there can be separate correlation matrices at each level of the moderator. If the moderator is coded 0,1, then the weight for the interaction term is just the difference in slopes between W&nbsp;=&nbsp;1 and W&nbsp;=&nbsp;0. For a continuous moderator, the weight would be the rate of change in the slope per unit increase in W.</p>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: specification -->
+    <div class="col">
+      <section class="panel">
+        <h2>Examples</h2>
+        <div class="presets" id="presets"></div>
+        <p class="note" id="presetNote"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Model</h2>
+        <div>
+          <label for="structure" class="eyebrow">Mediators</label>
+          <select id="structure">
+            <option value="single">One mediator (X → M → Y)</option>
+            <option value="parallel">Two contemporaneous mediators (X → [M₁, M₂] → Y)</option>
+            <option value="serial">Two sequential mediators (X → M₁ → M₂ → Y)</option>
+          </select>
+        </div>
+        <div class="scroll"><table class="paths" id="pathTable"></table></div>
+        <label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="wAll" style="margin-top:3px"> <span>Include W as a predictor in every equation, not only where it moderates</span></label>
+      </section>
+
+      <section class="panel" id="matrices"></section>
+    </div>
+
+    <!-- RIGHT: results -->
+    <div class="col" id="results"></div>
+  </div>
+
+  <p class="foot">Estimation: ordinary least squares on the pooled sample, built exactly from each group's n, means, SDs and correlations (W coded 0/1, so X×W equals X in group 1 and 0 in group 0). Paths not marked as moderated are constrained equal across groups. Confidence intervals are 95% Monte Carlo intervals (5,000 draws from the sampling distribution of the coefficients; Preacher &amp; Selig, 2012). With raw data, the bias-corrected bootstrap recommended by Holland et al. is the better choice; Monte Carlo intervals are its usual counterpart when only summary data are available. With SD = 1 in both groups, coefficients are in within-group standard-deviation units.</p>
+</div>
+
+<script>
+// ENGINE START
+const VARS=['X','M1','M2','Y'];
+const PATHS={a1:{from:0,to:1},a2:{from:0,to:2},d21:{from:1,to:2},b1:{from:1,to:3},b2:{from:2,to:3},c:{from:0,to:3}};
+const SYM={a1:'a₁',a2:'a₂',d21:'d₂₁',b1:'b₁',b2:'b₂',c:'c′'};
+function refreshSym(P){
+  const two=(x,y)=>P[x]&&P[y]&&P[x].on&&P[y].on;
+  SYM.a1=two('a1','a2')?'a₁':'a'; SYM.a2=two('a1','a2')?'a₂':'a';
+  SYM.b1=two('b1','b2')?'b₁':'b'; SYM.b2=two('b1','b2')?'b₂':'b';
+  if(P.a2&&!P.a2.on) SYM.a2='a₂'; if(P.b1&&!P.b1.on) SYM.b1='b₁';
+}
+function pathsFor(s){
+  if(s==='single') return {a1:'req',b1:'req',c:'opt'};
+  if(s==='parallel') return {a1:'req',a2:'req',b1:'req',b2:'req',c:'opt'};
+  return {a1:'req',d21:'req',b2:'req',a2:'opt',b1:'opt',c:'opt'};
+}
+function activeVars(s){return s==='single'?[0,1,3]:[0,1,2,3];}
+function effPaths(st,ov){
+  ov=ov||{}; const av=pathsFor(st.structure), P={};
+  for(const k in av){
+    const base=st.paths[k]||{on:false,mod:false}, o=ov[k]||{};
+    const on = av[k]==='req' ? true : (o.on!==undefined?o.on:base.on);
+    P[k]={on, mod: on && (o.mod!==undefined?o.mod:base.mod), req:av[k]==='req'};
+  }
+  return P;
+}
+function rawMoments(g){
+  const A=Array.from({length:5},()=>new Array(5).fill(0)), n=g.n;
+  A[0][0]=n;
+  for(let i=0;i<4;i++){ A[0][i+1]=A[i+1][0]=n*g.mean[i];
+    for(let j=0;j<4;j++) A[i+1][j+1]=(n-1)*g.r[i][j]*g.sd[i]*g.sd[j]+n*g.mean[i]*g.mean[j]; }
+  return A;
+}
+function termAt(t,g){
+  if(t.kind==='c') return [0,1];
+  if(t.kind==='v') return [t.v+1,1];
+  if(t.kind==='w') return [0,g];
+  return [t.v+1,g]; // product with W
+}
+function inv(M){
+  const n=M.length, A=M.map((r,i)=>[...r,...Array.from({length:n},(_,j)=>i===j?1:0)]);
+  for(let c=0;c<n;c++){
+    let piv=c; for(let r=c+1;r<n;r++) if(Math.abs(A[r][c])>Math.abs(A[piv][c])) piv=r;
+    if(Math.abs(A[piv][c])<1e-10) return null;
+    [A[c],A[piv]]=[A[piv],A[c]];
+    const d=A[c][c]; for(let j=0;j<2*n;j++) A[c][j]/=d;
+    for(let r=0;r<n;r++) if(r!==c){const f=A[r][c]; if(f) for(let j=0;j<2*n;j++) A[r][j]-=f*A[c][j];}
+  }
+  return A.map(r=>r.slice(n));
+}
+function chol(M){
+  const n=M.length,L=Array.from({length:n},()=>new Array(n).fill(0));
+  for(let i=0;i<n;i++)for(let j=0;j<=i;j++){
+    let s=M[i][j]; for(let k=0;k<j;k++) s-=L[i][k]*L[j][k];
+    if(i===j){ if(s<=1e-12) return null; L[i][i]=Math.sqrt(s);} else L[i][j]=s/L[j][j];
+  }
+  return L;
+}
+function lgamma(x){const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,.1208650973866179e-2,-.5395239384953e-5];
+  let y=x,t=x+5.5; t-=(x+.5)*Math.log(t); let s=1.000000000190015; for(const ci of c) s+=ci/++y; return -t+Math.log(2.5066282746310005*s/x);}
+function betacf(a,b,x){let qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap; if(Math.abs(d)<1e-30)d=1e-30; d=1/d; let h=d;
+  for(let m=1;m<=300;m++){const m2=2*m; let aa=m*(b-m)*x/((qam+m2)*(a+m2)); d=1+aa*d; if(Math.abs(d)<1e-30)d=1e-30; c=1+aa/c; if(Math.abs(c)<1e-30)c=1e-30; d=1/d; h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2)); d=1+aa*d; if(Math.abs(d)<1e-30)d=1e-30; c=1+aa/c; if(Math.abs(c)<1e-30)c=1e-30; d=1/d; const del=d*c; h*=del; if(Math.abs(del-1)<3e-12)break;}
+  return h;}
+function ibeta(x,a,b){ if(x<=0)return 0; if(x>=1)return 1;
+  const bt=Math.exp(lgamma(a+b)-lgamma(a)-lgamma(b)+a*Math.log(x)+b*Math.log(1-x));
+  return x<(a+1)/(a+b+2)? bt*betacf(a,b,x)/a : 1-bt*betacf(b,a,1-x)/b; }
+const pT=(t,df)=>ibeta(df/(df+t*t),df/2,.5);
+const pF=(F,d1,d2)=>F<=0?1:ibeta(d2/(d2+d1*F),d2/2,d1/2);
+
+function fitEq(groups,y,terms){
+  const p=terms.length, XtX=Array.from({length:p},()=>new Array(p).fill(0)), Xty=new Array(p).fill(0);
+  let yty=0,sy=0,N=0;
+  [0,1].forEach(g=>{
+    const A=rawMoments(groups[g]), tt=terms.map(t=>termAt(t,g));
+    for(let i=0;i<p;i++){ Xty[i]+=tt[i][1]*A[tt[i][0]][y+1];
+      for(let j=0;j<p;j++) XtX[i][j]+=tt[i][1]*tt[j][1]*A[tt[i][0]][tt[j][0]]; }
+    yty+=A[y+1][y+1]; sy+=A[0][y+1]; N+=groups[g].n;
+  });
+  const XI=inv(XtX); if(!XI) return null;
+  const b=XI.map(r=>r.reduce((s,v,j)=>s+v*Xty[j],0));
+  const SSE=yty-b.reduce((s,v,i)=>s+v*Xty[i],0), df=N-p, s2=SSE/df, SST=yty-sy*sy/N;
+  const cov=XI.map(r=>r.map(v=>v*s2)), se=cov.map((r,i)=>Math.sqrt(Math.max(r[i],0)));
+  return {y,terms,b,cov,se,df,N,SSE,R2:1-SSE/SST};
+}
+function buildEqs(st,ov){
+  const P=effPaths(st,ov), av=pathsFor(st.structure);
+  const defs=[{y:1,keys:['a1']}];
+  if(st.structure!=='single') defs.push({y:2,keys:['a2','d21']});
+  defs.push({y:3,keys:['c','b1','b2']});
+  return {P,eqs:defs.map(d=>{
+    const keys=d.keys.filter(k=>k in av && P[k].on), terms=[{kind:'c'}];
+    keys.forEach(k=>terms.push({kind:'v',v:PATHS[k].from,path:k}));
+    const mods=keys.filter(k=>P[k].mod);
+    if(mods.length||st.wAll) terms.push({kind:'w'});
+    mods.forEach(k=>terms.push({kind:'p',v:PATHS[k].from,path:k}));
+    return {y:d.y,terms};
+  })};
+}
+function fitModel(st,ov){
+  const {P,eqs}=buildEqs(st,ov), out={P,eqs:[],byPath:{}};
+  for(const e of eqs){
+    const f=fitEq(st.groups,e.y,e.terms); if(!f) return null;
+    f.idx={}; f.terms.forEach((t,i)=>{ if(t.path){ f.idx[t.path]=f.idx[t.path]||{}; f.idx[t.path][t.kind==='v'?'v':'p']=i; } });
+    Object.keys(f.idx).forEach(k=>out.byPath[k]=out.eqs.length);
+    out.eqs.push(f);
+  }
+  return out;
+}
+function pathSE(fm,k,g){
+  const e=fm.eqs[fm.byPath[k]], id=e.idx[k], V=e.cov;
+  let v=V[id.v][id.v]; if(id.p!==undefined) v+=g*g*V[id.p][id.p]+2*g*V[id.v][id.p];
+  return Math.sqrt(Math.max(v,0));
+}
+function pathAt(fm,k,g,bs){
+  const ei=fm.byPath[k], b=bs?bs[ei]:fm.eqs[ei].b, id=fm.eqs[ei].idx[k];
+  return b[id.v]+(id.p!==undefined?g*b[id.p]:0);
+}
+function routesFor(st,P){
+  const L=st.labels, n1=st.structure==='single'?L.M1:L.M1;
+  if(st.structure==='single') return [{paths:['a1','b1'],label:`via ${L.M1}`}];
+  if(st.structure==='parallel') return [{paths:['a1','b1'],label:`via ${L.M1}`},{paths:['a2','b2'],label:`via ${L.M2}`}];
+  const r=[{paths:['a1','d21','b2'],label:`via ${L.M1} → ${L.M2}`}];
+  if(P.b1.on) r.unshift({paths:['a1','b1'],label:`via ${L.M1} only`});
+  if(P.a2.on) r.push({paths:['a2','b2'],label:`via ${L.M2} only`});
+  return r;
+}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+function monteCarlo(fm,routes,R){
+  const rnd=mulberry32(20160658); let spare=null;
+  const z=()=>{ if(spare!==null){const s=spare;spare=null;return s;} let u=0,v=0; while(u===0)u=rnd(); v=rnd();
+    const m=Math.sqrt(-2*Math.log(u)); spare=m*Math.sin(2*Math.PI*v); return m*Math.cos(2*Math.PI*v); };
+  const Ls=fm.eqs.map(e=>chol(e.cov)||e.cov.map((r,i)=>r.map((_,j)=>i===j?Math.sqrt(Math.max(e.cov[i][i],0)):0)));
+  const store=routes.map(()=>[new Float64Array(R),new Float64Array(R),new Float64Array(R)]);
+  for(let r=0;r<R;r++){
+    const bs=fm.eqs.map((e,ei)=>{const zz=e.b.map(z), L=Ls[ei]; return e.b.map((v,i)=>{let s=v; for(let j=0;j<=i;j++) s+=L[i][j]*zz[j]; return s;});});
+    routes.forEach((rt,ri)=>{
+      const v0=rt.paths.reduce((s,k)=>s*pathAt(fm,k,0,bs),1), v1=rt.paths.reduce((s,k)=>s*pathAt(fm,k,1,bs),1);
+      store[ri][0][r]=v0; store[ri][1][r]=v1; store[ri][2][r]=v1-v0;
+    });
+  }
+  const q=(arr)=>{const s=Float64Array.from(arr).sort(); return [s[Math.floor(.025*R)], s[Math.ceil(.975*R)-1]];};
+  return store.map(s=>s.map(q));
+}
+// ENGINE END
+
+/* ---------- examples ---------- */
+function R(v){ // v = [xm1,xm2,xy,m1m2,m1y,m2y]
+  const [a,b,c,d,e,f]=v; return [[1,a,b,c],[a,1,d,e],[b,d,1,f],[c,e,f,1]];
+}
+const PRESETS=[
+ {id:'first',name:'First stage',cite:'Variables from Cianci, Klein & Seijts (2010)',structure:'single',
+  labels:{X:'Learning goal',M1:'Tension',M2:'M₂',Y:'Performance',W:'Conscientiousness',W0:'Low',W1:'High'},
+  paths:{a1:{mod:true},b1:{mod:false},c:{on:true,mod:false}}, n:[200,200],
+  r:[R([-.15,0,.19,0,-.30,0]),R([-.40,0,.26,0,-.34,0])],
+  note:'The simplest moderated mediation model. Conscientiousness moderates only the first stage: a learning goal reduces tension more for highly conscientious people. The tension → performance link and the direct path are the same in both groups, so every difference in the indirect effect comes from a. This uses the Cianci et al. variables but drops their direct-effect moderation, which the next example adds back.'},
+ {id:'cianci',name:'First stage + direct',cite:'Cianci, Klein & Seijts (2010)',structure:'single',
+  labels:{X:'Learning goal',M1:'Tension',M2:'M₂',Y:'Performance',W:'Conscientiousness',W0:'Low',W1:'High'},
+  paths:{a1:{mod:true},b1:{mod:false},c:{on:true,mod:true}}, n:[200,200],
+  r:[R([-.15,0,.15,0,-.30,0]),R([-.40,0,.40,0,-.35,0])],
+  note:'Partial mediation with conscientiousness moderating both the first stage (goal → tension) and the direct path (goal → performance). Holland et al. hold this paper up as their exemplar because each of the two moderation effects gets its own justification. X is coded 1 = learning goal, 0 = performance goal.'},
+ {id:'wallace',name:'Second stage',cite:'Wallace, Johnson, Mathe & Paul (2011)',structure:'single',
+  labels:{X:'Structural empowerment',M1:'Psych. empowerment',M2:'M₂',Y:'Performance',W:'Shared felt accountability',W0:'Low',W1:'High'},
+  paths:{a1:{mod:false},b1:{mod:true},c:{on:true,mod:false}}, n:[80,80],
+  r:[R([.50,0,.15,0,.15,0]),R([.50,0,.30,0,.45,0])],
+  note:'Accountability changes how strongly the mediator (psychological empowerment climate) translates into performance, so the moderator sits on the M → Y link. The X → M correlation is identical in both groups; the indirect effect still differs because b differs.'},
+ {id:'chowdhury',name:'First + second stage',cite:'Chowdhury & Endres (2010)',structure:'single',
+  labels:{X:'Client variability',M1:'Occupational strain',M2:'M₂',Y:'Injury',W:'Safety climate',W0:'Weak',W1:'Strong'},
+  paths:{a1:{mod:true},b1:{mod:true},c:{on:true,mod:false}}, n:[150,150],
+  r:[R([.45,0,.22,0,.40,0]),R([.20,0,.08,0,.15,0])],
+  note:'Safety climate buffers both stages: variability produces less strain, and strain produces fewer injuries. Holland et al. note the authors argued each stage separately, which is what a model with moderation on both links requires.'},
+ {id:'liu',name:'First stage, full mediation',cite:'Liu, Zhang, Wang & Lee (2011)',structure:'single',
+  labels:{X:'Autonomy support',M1:'Psych. empowerment',M2:'M₂',Y:'Voluntary turnover',W:'Autonomy orientation',W0:'Low',W1:'High'},
+  paths:{a1:{mod:true},b1:{mod:false},c:{on:false,mod:false}}, n:[120,120],
+  r:[R([.20,0,-.07,0,-.35,0]),R([.50,0,-.175,0,-.35,0])],
+  note:'Empowerment is framed as the pivotal mechanism, so the direct path is omitted. Full mediation needs evidence that the direct path is trivial; the "Full mediation" check below supplies it. Only 1 of 59 full-mediation models in the review tested this.'},
+ {id:'mueller',name:'Sequential mediators',cite:'Mueller & Kamdar (2011); W added for illustration',structure:'serial',
+  labels:{X:'Intrinsic motivation',M1:'Help seeking',M2:'Help giving',Y:'Creativity',W:'Task interdependence',W0:'Low',W1:'High'},
+  paths:{a1:{mod:false},d21:{mod:true},b2:{mod:false},a2:{on:false,mod:false},b1:{on:true,mod:false},c:{on:true,mod:false}}, n:[140,140],
+  r:[R([.35,.15,.25,.20,.25,.20]),R([.35,.25,.28,.55,.30,.30])],
+  note:'Seeking help creates an obligation to give help (norm of reciprocity). The moderator here is hypothetical: interdependence strengthens the seeking → giving link. The serial indirect effect is a triple product, so it tends to be small. Toggle a₂ and b₁ to see how omitted direct links change it.'},
+ {id:'davidson',name:'Contemporaneous mediators',cite:'Davidson et al. (2010); W added for illustration',structure:'parallel',
+  labels:{X:'Sabbatical',M1:'Resource gain',M2:'Resource loss',Y:'Well-being',W:'Detachment during leave',W0:'Low',W1:'High'},
+  paths:{a1:{mod:true},a2:{mod:true},b1:{mod:false},b2:{mod:false},c:{on:true,mod:false}}, n:[130,130],
+  r:[R([.20,-.15,.15,-.45,.40,-.40]),R([.45,-.35,.30,-.45,.40,-.40])],
+  note:'Respite raises resources gained and halts resource loss, each a separate pathway to well-being. The moderator is hypothetical. The two mediators correlate −.45, so each partial indirect effect is smaller than it would be in a one-mediator model (see the collinearity check).'}
+];
+
+/* ---------- state ---------- */
+let st;
+function loadPreset(p){
+  st={preset:p.id,structure:p.structure,labels:{...p.labels},wAll:false,paths:{},
+      groups:[0,1].map(g=>({n:p.n[g],r:p.r[g].map(r=>r.slice()),mean:[0,0,0,0],sd:[1,1,1,1]}))};
+  for(const k in PATHS){ const v=p.paths[k]||{}; st.paths[k]={on:v.on!==undefined?v.on:true,mod:!!v.mod}; }
+  renderPresets(); renderModel(); renderMatrices(); schedule();
+}
+
+/* ---------- formatting ---------- */
+const fmt=(x,d=3)=>!isFinite(x)?'—':(x<0?'−':'')+Math.abs(x).toFixed(d);
+const fmtp=p=>p<.001?'< .001':p.toFixed(3).replace(/^0/,'');
+const fmtr=x=>(x<0?'−':'')+Math.abs(x).toFixed(2).replace(/^0/,'');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const vlab=i=>st.labels[VARS[i]];
+
+/* ---------- left panels ---------- */
+function renderPresets(){
+  const el=document.getElementById('presets');
+  el.innerHTML=PRESETS.map(p=>`<button class="preset" data-id="${p.id}" aria-pressed="${st&&st.preset===p.id}"><b>${esc(p.name)}</b><span>${esc(p.cite)}</span></button>`).join('');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>loadPreset(PRESETS.find(p=>p.id===b.dataset.id)));
+  const p=PRESETS.find(p=>p.id===st.preset);
+  document.getElementById('presetNote').innerHTML=p?`<strong>${esc(p.cite)}.</strong> ${esc(p.note)} Correlations are illustrative values chosen to show the pattern, not the published estimates.`:'';
+}
+function pathName(k){const p=PATHS[k];return `${esc(vlab(p.from))} → ${esc(vlab(p.to))}`;}
+function renderModel(){
+  document.getElementById('structure').value=st.structure;
+  document.getElementById('wAll').checked=st.wAll;
+  const P=effPaths(st), order=['a1','a2','d21','b1','b2','c'].filter(k=>k in P);
+  refreshSym(P);
+  document.getElementById('pathTable').innerHTML=`<thead><tr><th>Path</th><th style="text-align:center">In model</th><th style="text-align:center">Moderated by W</th></tr></thead><tbody>`+
+    order.map(k=>`<tr><td><span class="sym">${SYM[k]}</span>${pathName(k)}${k==='c'?' <span class="req">(direct)</span>':''}</td>
+      <td class="c">${P[k].req?'<span class="req">required</span>':`<input type="checkbox" id="on-${k}" data-k="${k}" class="pon" ${P[k].on?'checked':''} aria-label="Include ${SYM[k]}">`}</td>
+      <td class="c"><input type="checkbox" id="mod-${k}" data-k="${k}" class="pmod" ${P[k].mod?'checked':''} ${P[k].on?'':'disabled'} aria-label="${SYM[k]} moderated by W"></td></tr>`).join('')+'</tbody>';
+  document.querySelectorAll('.pon').forEach(c=>c.onchange=()=>{st.paths[c.dataset.k].on=c.checked; if(!c.checked) st.paths[c.dataset.k].mod=false; renderModel(); schedule();});
+  document.querySelectorAll('.pmod').forEach(c=>c.onchange=()=>{st.paths[c.dataset.k].mod=c.checked; schedule();});
+}
+function tint(r){return '';}
+function renderMatrices(){
+  const av=activeVars(st.structure), el=document.getElementById('matrices');
+  const head=`<tr><th></th>${av.map(i=>`<th title="${esc(vlab(i))}">${VARS[i]==='M1'&&st.structure==='single'?'M':VARS[i].replace('1','₁').replace('2','₂')}</th>`).join('')}</tr>`;
+  el.innerHTML=`<div class="row" style="justify-content:space-between"><h2>Input correlations</h2><button id="copy01">Copy W = 0 into W = 1</button></div>
+   <p class="note">Edit the lower triangle; the upper triangle mirrors it. Green cells are the correlations expected to differ between the groups; red cells are expected to be the same. <span id="matHint"></span></p>`+
+   [0,1].map(g=>{
+     const G=st.groups[g];
+     const rows=av.map((i,ri)=>`<tr><th class="rh" title="${esc(vlab(i))}">${esc(vlab(i))}</th>${av.map((j,ci)=>{
+        if(i===j) return `<td><div class="fixed">1.00</div></td>`;
+        if(ci<ri) return `<td><input type="number" step="0.01" min="-0.99" max="0.99" id="r-${g}-${i}-${j}" data-g="${g}" data-i="${i}" data-j="${j}" class="rin" value="${G.r[i][j]}" style="${tint(G.r[i][j])}" aria-label="r ${esc(vlab(i))} with ${esc(vlab(j))}, W = ${g}"></td>`;
+        return `<td><div class="fixed" id="m-${g}-${i}-${j}" style="${tint(G.r[i][j])}">${fmtr(G.r[i][j])}</div></td>`;}).join('')}</tr>`).join('');
+     const desc=(key,lab,step)=>`<tr class="desc"><th class="rh">${lab}</th>${av.map(i=>`<td><input type="number" step="${step}" id="${key}-${g}-${i}" data-g="${g}" data-i="${i}" data-key="${key}" class="din" value="${G[key][i]}" aria-label="${lab} of ${esc(vlab(i))}, W = ${g}"></td>`).join('')}</tr>`;
+     return `<div style="display:flex;flex-direction:column;gap:6px">
+       <div class="mat-head"><span class="chip g${g}"><span class="dot"></span>W = ${g} · ${esc(st.labels['W'+g])} ${esc(st.labels.W.toLowerCase())}</span>
+       <label for="n-${g}" style="margin-left:auto">n <input type="number" min="10" step="1" id="n-${g}" data-g="${g}" class="nin n-in" value="${G.n}"></label></div>
+       <div class="scroll"><table class="mat"><thead>${head}</thead><tbody>${rows}<tr class="sep"><td></td></tr>${desc('mean','Mean',0.1)}${desc('sd','SD',0.1)}</tbody></table></div>
+       <div class="bad" id="pd-${g}"></div></div>`;
+   }).join('');
+  el.querySelectorAll('.rin').forEach(inp=>inp.addEventListener('input',()=>{
+    const v=parseFloat(inp.value), g=+inp.dataset.g,i=+inp.dataset.i,j=+inp.dataset.j;
+    if(!isFinite(v)||v<=-1||v>=1) return;
+    st.groups[g].r[i][j]=st.groups[g].r[j][i]=v; 
+    const m=document.getElementById(`m-${g}-${j}-${i}`); if(m){m.textContent=fmtr(v);}
+    schedule();
+  }));
+  el.querySelectorAll('.din').forEach(inp=>inp.addEventListener('input',()=>{
+    const v=parseFloat(inp.value); if(!isFinite(v)) return; if(inp.dataset.key==='sd'&&v<=0) return;
+    st.groups[+inp.dataset.g][inp.dataset.key][+inp.dataset.i]=v; schedule();
+  }));
+  el.querySelectorAll('.nin').forEach(inp=>inp.addEventListener('input',()=>{
+    const v=parseInt(inp.value,10); if(!(v>=10)) return; st.groups[+inp.dataset.g].n=v; schedule();
+  }));
+  document.getElementById('copy01').onclick=()=>{const a=st.groups[0]; st.groups[1]={n:a.n,r:a.r.map(r=>r.slice()),mean:a.mean.slice(),sd:a.sd.slice()}; renderMatrices(); schedule();};
+}
+document.getElementById('structure').onchange=e=>{
+  st.structure=e.target.value; st.preset=null;
+  if(st.structure!=='single'&&st.labels.M2==='M₂'){}
+  renderPresets(); renderModel(); renderMatrices(); schedule();
+};
+document.getElementById('wAll').onchange=e=>{st.wAll=e.target.checked; schedule();};
+
+/* ---------- results ---------- */
+let pending=false;
+function schedule(){ if(pending) return; pending=true; requestAnimationFrame(()=>{pending=false; compute();}); }
+
+function hayesLabel(P){
+  if(st.structure==='serial'){ const any=Object.values(P).some(p=>p.mod); return any?'Serial mediation · custom moderation':'Hayes Model 6'; }
+  if(st.structure==='parallel'){ if(P.a1.mod!==P.a2.mod||P.b1.mod!==P.b2.mod) return 'Parallel mediators · custom moderation'; }
+  const key=(P.a1.mod?'a':'')+(P.b1.mod?'b':'')+(P.c.mod?'c':'');
+  const m={'':4,'a':7,'ac':8,'b':14,'bc':15,'ab':58,'abc':59,'c':5}[key];
+  return `Hayes Model ${m}`+(P.c.on?'':' · direct path omitted');
+}
+function whyNote(fm,P,routes){
+  const W=st.labels.W, lev=g=>`${esc(W)} is ${esc(st.labels['W'+g].toLowerCase())}`, link=k=>`${esc(vlab(PATHS[k].from))} → ${esc(vlab(PATHS[k].to))}`;
+  const out=[];
+  routes.forEach(r=>{
+    const mods=r.paths.filter(k=>P[k].mod);
+    const name=routes.length>1?`The indirect effect ${esc(r.label)}`:'The indirect effect';
+    if(!mods.length) return;
+    const v=[0,1].map(g=>r.paths.reduce((t,k)=>t*pathAt(fm,k,g),1));
+    if(v[0]*v[1]<0){
+      out.push(`${name} changes sign across levels of ${esc(W)}: it is ${v[0]>0?'positive':'negative'} when ${lev(0)} and ${v[1]>0?'positive':'negative'} when ${lev(1)}, because the ${mods.map(link).join(' and ')} linkage${mods.length>1?'s':''} change${mods.length>1?'':'s'} across groups.`);
+      return;
+    }
+    const hi=Math.abs(v[1])>=Math.abs(v[0])?1:0, lo=1-hi;
+    const up=mods.filter(k=>Math.abs(pathAt(fm,k,hi))>Math.abs(pathAt(fm,k,lo))), down=mods.filter(k=>!up.includes(k));
+    let why;
+    if(!down.length) why=up.length>1?`the ${up.map(link).join(' and ')} linkages are both stronger`:`the ${link(up[0])} linkage is stronger`;
+    else why=`the stronger ${up.map(link).join(' and ')} linkage${up.length>1?'s outweigh':' outweighs'} the weaker ${down.map(link).join(' and ')} linkage${down.length>1?'s':''}`;
+    out.push(`${name} is stronger when ${lev(hi)} because ${why}.`);
+  });
+  if(!out.length && routes.length) out.push(`No link in the indirect path${routes.length>1?'s':''} is moderated, so the indirect effect${routes.length>1?'s are':' is'} the same at both levels of ${esc(W)}.`);
+  return out.length?`<p class="note">${out.join(' ')}</p>`:'';
+}
+function multiModNote(fm,P,routes){
+  const W=esc(st.labels.W), X=esc(st.labels.X), Y=esc(st.labels.Y), out=[];
+  const ind=g=>routes.reduce((s,r)=>s+r.paths.reduce((t,k)=>t*pathAt(fm,k,g),1),0);
+  const indMod=routes.some(r=>r.paths.some(k=>P[k].mod));
+  // more than one moderated stage within the same indirect path
+  const chain=routes.find(r=>r.paths.filter(k=>P[k].mod).length>1);
+  if(chain){
+    const mods=chain.paths.filter(k=>P[k].mod);
+    const grow=mods.map(k=>Math.abs(pathAt(fm,k,1))>Math.abs(pathAt(fm,k,0)));
+    const same=grow.every(v=>v===grow[0]);
+    out.push(`Notice that ${W} would be an especially strong moderator of the indirect effect because it moderates more than one link in the same chain (${mods.map(k=>SYM[k]).join(' and ')}). The indirect effect is the product of those links, so changes in each are multiplied together. `+
+      (same?`Here every moderated link is ${grow[0]?'stronger':'weaker'} at W = 1 (${esc(st.labels.W1)}), so the changes compound: the indirect effect goes from ${fmt(ind(0))} to ${fmt(ind(1))}.`
+           :`Here, though, one link gets stronger and another weaker at W = 1, so the changes partly offset each other.`));
+  }
+  if(P.c.on&&P.c.mod&&indMod){
+    const dInd=ind(1)-ind(0), dDir=pathAt(fm,'c',1)-pathAt(fm,'c',0), same=dInd*dDir>0;
+    out.push(`Notice that ${W} would be an especially strong moderator of the total effect of ${X} on ${Y} because it moderates more than one of the paths from ${X} to ${Y}. `+
+      (same?`Here the change in the indirect effect (${fmt(dInd)}) and the change in the direct effect (${fmt(dDir)}) have the same sign, so they add up to a change of ${fmt(dInd+dDir)} in the total effect.`
+           :`Here, though, the change in the indirect effect (${fmt(dInd)}) and the change in the direct effect (${fmt(dDir)}) have opposite signs, so they partly cancel in the total effect.`));
+  }
+  return out.map(t=>`<p class="note">${t}</p>`).join('');
+}
+function matHint(P){
+  const el=document.getElementById('matHint'); if(!el) return;
+  const one=st.structure==='single', v=i=>i===0?'X':i===3?'Y':(one?'M':(i===1?'M₁':'M₂'));
+  const r=k=>`r<sub>${v(PATHS[k].from)}${v(PATHS[k].to)}</sub>`;
+  const mods=Object.keys(P).filter(k=>P[k].on&&P[k].mod);
+  const diff=new Set(mods.map(k=>[PATHS[k].from,PATHS[k].to].sort().join('-')));
+  document.querySelectorAll('#matrices .rin').forEach(inp=>{
+    const g=inp.dataset.g,i=+inp.dataset.i,j=+inp.dataset.j, key=[i,j].sort().join('-'), cls=diff.has(key)?'diff':'same';
+    const m=document.getElementById(`m-${g}-${j}-${i}`);
+    [inp,m].forEach(e=>{ if(e){ e.classList.remove('diff','same'); e.classList.add(cls); } });
+  });
+  if(!mods.length){ el.innerHTML='No path is moderated, so the two matrices would be expected to be the same.'; return; }
+  const parts=[];
+  if(mods.some(k=>k==='a1'||k==='a2')) parts.push('first stage');
+  if(mods.includes('d21')) parts.push('mediator-to-mediator');
+  if(mods.some(k=>k==='b1'||k==='b2')) parts.push('second stage');
+  if(mods.includes('c')) parts.push('direct effect');
+  const name=parts.filter(Boolean).join(' and ');
+  const rs=mods.map(r), list=rs.length>1?rs.slice(0,-1).join(', ')+' and '+rs[rs.length-1]:rs[0];
+  el.innerHTML=`Because this is a ${name} moderation model, the number${rs.length>1?'s':''} that would be expected to differ ${rs.length>1?'are':'is'} ${list}.`;
+}
+function hayesSentence(P){
+  let m=null, note='';
+  if(st.structure==='serial'){ if(!Object.values(P).some(p=>p.mod)) m=6; }
+  else if(st.structure!=='parallel'||(P.a1.mod===P.a2.mod&&P.b1.mod===P.b2.mod)){
+    const key=(P.a1.mod?'a':'')+(P.b1.mod?'b':'')+(P.c.mod?'c':'');
+    m={'':4,'a':7,'ac':8,'b':14,'bc':15,'ab':58,'abc':59,'c':5}[key];
+    if(st.structure==='parallel') note=' with two parallel mediators';
+  }
+  if(!P.c.on&&m) note+=', with the direct path omitted';
+  return m?`This example corresponds to Hayes\' Model ${m}${note}.`
+          :`This example has no numbered equivalent among Hayes\' models; it is a ${st.structure==='serial'?'serial':'parallel'} mediation model with a custom pattern of moderation.`;
+}
+function stageLabel(P){
+  const s=[]; const first=['a1','a2'].some(k=>P[k]&&P[k].mod), second=['b1','b2'].some(k=>P[k]&&P[k].mod);
+  if(first) s.push('first stage'); if(P.d21&&P.d21.mod) s.push('M₁ → M₂ link'); if(second) s.push('second stage'); if(P.c.mod) s.push('direct effect');
+  return s.length?'W moderates the '+s.join(', '):'No path is moderated';
+}
+
+function compute(){
+  const res=document.getElementById('results'), av=activeVars(st.structure);
+  // positive definiteness
+  let ok=true;
+  [0,1].forEach(g=>{const sub=av.map(i=>av.map(j=>st.groups[g].r[i][j])); const pd=!!chol(sub);
+    document.getElementById('pd-'+g).textContent=pd?'':'This matrix is not positive definite: no set of scores could produce these correlations. Adjust a value.'; ok=ok&&pd;});
+  if(!ok){res.innerHTML=`<section class="panel"><h2>Estimates paused</h2><p>Fix the correlation matrix flagged on the left and the estimates will return.</p></section>`;return;}
+  const fm=fitModel(st); if(!fm){res.innerHTML=`<section class="panel"><p>The design matrix is singular for this specification.</p></section>`;return;}
+  const P=fm.P, routes=routesFor(st,P); refreshSym(P); matHint(P);
+  const mcRoutes=routes.slice(); if(routes.length>1) mcRoutes.push({paths:null,label:'Total indirect'});
+  // Monte Carlo: handle total by summing routes
+  const mcIn=routes.concat(P.c.on?[{paths:['c']}]:[]);
+  const draws=monteCarloWithTotal(fm,routes,P.c.on);
+  const point=(paths,g)=>paths.reduce((s,k)=>s*pathAt(fm,k,g),1);
+  const rows=routes.map((r,i)=>({label:'Indirect '+r.label,v:[point(r.paths,0),point(r.paths,1)],ci:draws.routes[i]}));
+  if(routes.length>1) rows.push({label:'Total indirect',total:true,v:[0,1].map(g=>routes.reduce((s,r)=>s+point(r.paths,g),0)),ci:draws.total});
+  if(P.c.on) rows.push({label:`Direct effect (${SYM.c})`,direct:true,v:[pathAt(fm,'c',0),pathAt(fm,'c',1)],ci:draws.direct});
+  const cell=(v,ci)=>{const sig=ci[0]>0||ci[1]<0; return `<span class="num ${sig?'sig':''}">${fmt(v)}</span><span class="ci num">[${fmt(ci[0])}, ${fmt(ci[1])}]</span>`;};
+  const estTable=`<table class="est"><thead><tr><th>Effect of ${esc(st.labels.X)} on ${esc(st.labels.Y)}</th><th class="g0">W = 0 · ${esc(st.labels.W0)}</th><th class="g1">W = 1 · ${esc(st.labels.W1)}</th><th>Difference (1 − 0)</th></tr></thead><tbody>`+
+    rows.map(r=>`<tr class="${r.total?'total':''}${r.direct?' direct':''}"><td>${esc(r.label)}</td><td>${cell(r.v[0],r.ci[0])}</td><td>${cell(r.v[1],r.ci[1])}</td><td>${r.direct&&!P.c.mod?'<span class="ci">not moderated</span>':cell(r.v[1]-r.v[0],r.ci[2])}${!r.direct?'':''}</td></tr>`).join('')+'</tbody></table>';
+
+  const diagram=diagramSVG(fm,P);
+
+  res.innerHTML=`
+  <section class="panel">
+    <div class="row" style="justify-content:space-between"><h2>Conditional indirect effects</h2><span class="model-tag">${esc(hayesLabel(P))}</span></div>
+    <p class="note">${hayesSentence(P)} Below are the indirect effects at each level of the moderator as well as the difference between the two. The difference column is the <strong>index of moderated mediation</strong> for each indirect path: with a dichotomous W, it is the conditional indirect effect at W = 1 minus the one at W = 0. Bold values have 95% CIs that exclude zero.</p>
+    ${multiModNote(fm,P,routes)}
+    <div class="scroll">${estTable}</div>
+    ${whyNote(fm,P,routes)}
+    <p class="note"><strong>How the intervals were computed.</strong> Each equation's coefficients have an estimated sampling covariance matrix from the regression. The tool draws 5,000 sets of coefficients from multivariate normal distributions with those means and covariances, computes the conditional indirect effects (and their difference) from each set, and takes the 2.5th and 97.5th percentiles of the 5,000 results as the 95% CI. The standard deviation of the 5,000 values is the Monte Carlo SE. <strong>Why this is necessary:</strong> an indirect effect is a product of coefficients, and the sampling distribution of a product is skewed and heavy-tailed unless the effect is zero. A normal-theory SE (the Sobel test) with a symmetric ±1.96 SE interval therefore misstates the error rates (MacKinnon et al., 2002). Simulation, like the bootstrap that Holland et al. recommend for raw data, lets the interval be asymmetric.</p>
+  </section>
+  <section class="panel">
+    <h2>Operational path diagram</h2>
+    <p class="note">Every variable in the analysis and nothing else (Holland et al., recommendation 9). Moderated paths show the slope at W = 0 and at W = 1; unmoderated paths show the single constrained estimate. Dashed arrows mark where W acts; the number on each is the weight for that interaction term (the W = 1 slope minus the W = 0 slope).</p>
+    <div class="scroll">${diagram}</div>
+    ${mathBlock(fm,P,routes)}
+  </section>
+  <section class="panel"><h2>Checks against the Holland et al. checklist</h2><div class="checks">${checks(fm,P,routes)}</div></section>
+  <section class="panel"><h2>Regression equations</h2><div style="display:flex;flex-direction:column;gap:8px">${fm.eqs.map(e=>`<div class="scroll">${eqTable(e)}</div>`).join('')}</div></section>`;
+}
+function monteCarloWithTotal(fm,routes,withDirect){
+  const all=routes.map(r=>({paths:r.paths}));
+  if(withDirect) all.push({paths:['c']});
+  // total indirect needs per-draw sums: run a custom pass
+  const R=5000, rnd=mulberry32(20160658); let spare=null;
+  const z=()=>{ if(spare!==null){const s=spare;spare=null;return s;} let u=0; while(u===0)u=rnd(); const v=rnd();
+    const m=Math.sqrt(-2*Math.log(u)); spare=m*Math.sin(2*Math.PI*v); return m*Math.cos(2*Math.PI*v); };
+  const Ls=fm.eqs.map(e=>chol(e.cov)||e.cov.map((r,i)=>r.map((_,j)=>i===j?Math.sqrt(Math.max(e.cov[i][i],0)):0)));
+  const S=all.map(()=>[[],[],[]]), T=[[],[],[]];
+  for(let r=0;r<R;r++){
+    const bs=fm.eqs.map((e,ei)=>{const zz=e.b.map(z),L=Ls[ei]; return e.b.map((v,i)=>{let s=v; for(let j=0;j<=i;j++) s+=L[i][j]*zz[j]; return s;});});
+    let t0=0,t1=0;
+    all.forEach((rt,ri)=>{const v0=rt.paths.reduce((s,k)=>s*pathAt(fm,k,0,bs),1), v1=rt.paths.reduce((s,k)=>s*pathAt(fm,k,1,bs),1);
+      S[ri][0].push(v0);S[ri][1].push(v1);S[ri][2].push(v1-v0); if(ri<routes.length){t0+=v0;t1+=v1;}});
+    T[0].push(t0);T[1].push(t1);T[2].push(t1-t0);
+  }
+  const q=a=>{a.sort((x,y)=>x-y); return [a[Math.floor(.025*R)],a[Math.ceil(.975*R)-1]];};
+  const out={routes:S.slice(0,routes.length).map(s=>s.map(q)),total:T.map(q)};
+  if(withDirect) out.direct=S[routes.length].map(q);
+  return out;
+}
+
+function mathBlock(fm,P,routes){
+  const z=(x,d=3)=>{if(!isFinite(x))return '—'; const t=Math.abs(x).toFixed(d); return (x<0?'−':'')+(Math.abs(x)<1?t.replace(/^0/,''):t);};
+  const col=g=>{
+    const lines=[]; let tot=0;
+    routes.forEach(r=>{
+      const vals=r.paths.map(k=>pathAt(fm,k,g)), prod=vals.reduce((a,b)=>a*b,1); tot+=prod;
+      lines.push(`<div class="mrow"><span class="mlab">Indirect${routes.length>1?' '+esc(r.label):''}</span><span class="num">${r.paths.map(k=>SYM[k]).join(' × ')} = ${vals.map(v=>z(v)).join(' × ')} = <b>${z(prod)}</b></span></div>`);
+    });
+    if(routes.length>1) lines.push(`<div class="mrow"><span class="mlab">Total indirect</span><span class="num">${routes.map(r=>z(r.paths.reduce((a,k)=>a*pathAt(fm,k,g),1))).join(' + ').replace(/\+ −/g,'− ')} = <b>${z(tot)}</b></span></div>`);
+    const dir=P.c.on?pathAt(fm,'c',g):0;
+    lines.push(`<div class="mrow"><span class="mlab">Direct</span><span class="num">${P.c.on?`${SYM.c} = <b>${z(dir)}</b>`:'omitted (fixed at 0)'}</span></div>`);
+    lines.push(`<div class="mrow"><span class="mlab">Total effect</span><span class="num">${z(tot)} ${dir<0?'−':'+'} ${z(Math.abs(dir))} = <b>${z(tot+dir)}</b></span></div>`);
+    return `<div class="mcol"><span class="chip g${g}"><span class="dot"></span>W = ${g} · ${esc(st.labels.W)} ${esc(st.labels['W'+g].toLowerCase())}</span>${lines.join('')}</div>`;
+  };
+  return `<div class="math"><h3>Conditional effects, worked out</h3><div class="mgrid">${col(0)}${col(1)}</div>
+    <p class="note">Each conditional path is its coefficient at that level of W (shown in the diagram). The indirect effect multiplies the paths along the chain; the total effect adds the direct effect to the indirect effect${routes.length>1?'s':''}.</p></div>`;
+}
+function directNote(fm,routes){
+  const r=routes[0]; let ex='';
+  if(r.paths.length===2){
+    const [ka,kb]=r.paths, g=1, a=pathAt(fm,ka,g), b=pathAt(fm,kb,g), sa=pathSE(fm,ka,g), sb=pathSE(fm,kb,g), sc=pathSE(fm,'c',g);
+    const t1=b*b*sa*sa, t2=a*a*sb*sb, se=Math.sqrt(t1+t2), f=v=>v.toFixed(5).replace(/^0/,'');
+    ex=` In the current model at W = 1: a = ${fmt(a)} (SE ${fmt(sa)}) and b = ${fmt(b)} (SE ${fmt(sb)}). The two terms are b²·SE<sub>a</sub>² = ${fmt(b*b,3)} × ${f(sa*sa)} = ${f(t1)} and a²·SE<sub>b</sub>² = ${fmt(a*a,3)} × ${f(sb*sb)} = ${f(t2)}. Their sum is ${f(t1+t2)}, so the SE of the indirect effect is about ${fmt(se)}. The direct effect's SE is ${fmt(sc)}, its own SE with nothing multiplied away.`;
+  }
+  return `<p class="note"><strong>Why the direct-effect intervals are wider.</strong> The variance of an indirect effect a × b is approximately b²·SE<sub>a</sub>² + a²·SE<sub>b</sub>². It is a sum of two terms, but each term is one coefficient's sampling variance multiplied by the <i>square of the other coefficient</i>. Path coefficients are usually well below 1, and squaring makes them much smaller (.30² = .09), so each term is only a small fraction of a single coefficient's variance. Adding two small numbers still gives a small number. The direct effect is one coefficient, so its variance is not multiplied by anything; in addition, its SE is inflated because X is correlated with the mediator it is adjusted for.${ex} A narrow interval for the indirect effect does not mean it is estimated more precisely relative to its size, because the indirect effect itself is also a product of small numbers.</p>`;
+}
+function termName(t){
+  if(t.kind==='c') return 'Intercept';
+  if(t.kind==='w') return `W (${st.labels.W})`;
+  const v=vlab(t.v); return t.kind==='v'?`${v}  [${SYM[t.path]}]`:`${v} × W  [${SYM[t.path]} × W]`;
+}
+function eqTable(e){
+  return `<table class="eqs"><caption>${esc(vlab(e.y))}<span>R² = ${fmtr(e.R2).replace(/^−/,'−')} · N = ${e.N}</span></caption>
+  <thead><tr><th>Predictor</th><th>b</th><th>SE</th><th>t</th><th>p</th></tr></thead><tbody>`+
+  e.terms.map((t,i)=>{const tv=e.b[i]/e.se[i]; return `<tr><td>${esc(termName(t))}</td><td class="num">${fmt(e.b[i])}</td><td class="num">${fmt(e.se[i])}</td><td class="num">${fmt(tv,2)}</td><td class="num">${fmtp(pT(tv,e.df))}</td></tr>`;}).join('')+'</tbody></table>';
+}
+
+/* ---------- checks ---------- */
+function prodTest(fm,k){
+  const e=fm.eqs[fm.byPath[k]], i=e.idx[k].p, t=e.b[i]/e.se[i]; return {b:e.b[i],t,p:pT(t,e.df),df:e.df};
+}
+const predSym=k=>{const v=PATHS[k].from; return v===0?'X':(st.structure==='single'?'M':(v===1?'M₁':'M₂'));};
+function checks(fm,P,routes){
+  const out=[], badge=(c,t)=>`<span class="badge ${c}">${t}</span>`;
+  const item=(c,t,body,rec)=>out.push(`<div class="check">${badge(c,t)}<div><p>${body}</p>${rec?`<p class="rec">${rec}</p>`:''}</div></div>`);
+  // 1. location of moderation
+  const rowsL=Object.keys(P).filter(k=>P[k].on&&P[k].mod).map(k=>({k,r:prodTest(fm,k)}));
+  const weak=rowsL.filter(x=>x.r.p>=.05);
+  const list=rowsL.map(x=>`${SYM[x.k]}: b<sub>${predSym(x.k)}W</sub> = ${fmt(x.r.b)}, p ${fmtp(x.r.p).startsWith('<')?fmtp(x.r.p):'= '+fmtp(x.r.p)}`).join(' · ');
+  if(rowsL.length) item(weak.length?'warn':'ok','Location',
+    (weak.length?`The product term on ${weak.map(x=>SYM[x.k]).join(', ')} is not significant. `:'Each hypothesized product term is significant on the path where the model places it. ')+
+    `<span class="num" style="font-size:.8rem">${list}</span>`,
+    'Rec. 5 & analysis rec. 6: say which linkage each moderator acts on, and test the product on that specific path rather than moderation of X → Y as a whole.');
+  // 2. full vs partial mediation
+  if(!P.c.on){
+    const firstMod=['a1','a2'].some(k=>P[k]&&P[k].mod);
+    const alt=fitModel(st,{c:{on:true,mod:firstMod}});
+    const yM=fm.eqs[fm.eqs.length-1], yA=alt.eqs[alt.eqs.length-1], q=yA.terms.length-yM.terms.length;
+    const F=((yM.SSE-yA.SSE)/q)/(yA.SSE/yA.df), p=pF(F,q,yA.df), dR=yA.R2-yM.R2;
+    const d0=pathAt(alt,'c',0), d1=pathAt(alt,'c',1);
+    item(p<.05?'warn':'ok','Full mediation',
+      `Adding the direct path${firstMod?' and its product with W (the first-stage product can also reach Y directly)':''} to the ${esc(st.labels.Y)} equation changes R² by <span class="num">${fmt(dR)}</span>, F(${q}, ${yA.df}) = <span class="num">${fmt(F,2)}</span>, p ${fmtp(p).startsWith('<')?fmtp(p):'= '+fmtp(p)}. Direct effect if estimated: <span class="num">${fmt(d0)}</span> at W = 0, <span class="num">${fmt(d1)}</span> at W = 1. `+
+      (p<.05?'The data do not support the claim that the direct path is trivial; full mediation is not supported.':'A small, non-significant increment is the evidence full mediation requires. Remember that non-significance is not proof of zero; judge the size of the direct effect too.'),
+      'Analysis rec. 4 & 16: a full-mediation hypothesis needs evidence that the indirect path is substantial and the direct path trivial. A drop in the X weight shows only partial mediation.');
+  } else {
+    const firstMod=['a1','a2'].some(k=>P[k]&&P[k].mod);
+    if(firstMod&&!P.c.mod){
+      const alt=fitModel(st,{c:{mod:true}}), r=prodTest(alt,'c');
+      item(r.p<.05?'warn':'info','First-stage product',
+        `With first-stage moderation and partial mediation, ask whether X × W also reaches ${esc(st.labels.Y)} directly. Adding it gives b = <span class="num">${fmt(r.b)}</span>, p ${fmtp(r.p).startsWith('<')?fmtp(r.p):'= '+fmtp(r.p)}.`,
+        'Rec. 6a-ii: justify (or rule out) a direct link from the first-stage product to the outcome. Half of first-stage papers in the review never tested it.');
+    } else {
+      item('info','Partial mediation','The direct path is in the model, so the hypothesis is partial mediation. The introduction must give at least one reason for the X → Y relationship other than the mediator(s) included here.','Rec. 2b & 7: state explicitly that mediation is partial, and justify the direct effect.');
+    }
+  }
+  // 3. collinearity of contemporaneous mediators
+  if(st.structure==='parallel'){
+    const single=[1,2].map(m=>{const k=m===1?['a1','b1']:['a2','b2'];
+      const aT=[{kind:'c'},{kind:'v',v:0}], aMod=P[k[0]].mod, bMod=P[k[1]].mod, cOn=P.c.on, cMod=P.c.mod;
+      if(aMod||st.wAll) aT.push({kind:'w'}); if(aMod) aT.push({kind:'p',v:0});
+      const yT=[{kind:'c'}]; if(cOn) yT.push({kind:'v',v:0}); yT.push({kind:'v',v:m}); if(bMod||cMod||st.wAll) yT.push({kind:'w'}); if(cMod) yT.push({kind:'p',v:0}); if(bMod) yT.push({kind:'p',v:m});
+      const fa=fitEq(st.groups,m,aT), fb=fitEq(st.groups,3,yT);
+      const ai=g=>fa.b[1]+(aMod?g*fa.b[fa.b.length-1]:0), bi=g=>fb.b[yT.findIndex(t=>t.kind==='v'&&t.v===m)]+(bMod?g*fb.b[fb.b.length-1]:0);
+      return [ai(0)*bi(0),ai(1)*bi(1)];});
+    const both=routes.map(r=>[0,1].map(g=>r.paths.reduce((s,k)=>s*pathAt(fm,k,g),1)));
+    const r12=[0,1].map(g=>fmtr(st.groups[g].r[1][2]));
+    item('info','Correlated mediators',
+      `The mediators correlate ${r12[0]} (W = 0) and ${r12[1]} (W = 1). Indirect effect through ${esc(st.labels.M1)}: <span class="num">${fmt(both[0][0])} / ${fmt(both[0][1])}</span> here versus <span class="num">${fmt(single[0][0])} / ${fmt(single[0][1])}</span> in a one-mediator model. Through ${esc(st.labels.M2)}: <span class="num">${fmt(both[1][0])} / ${fmt(both[1][1])}</span> versus <span class="num">${fmt(single[1][0])} / ${fmt(single[1][1])}</span>. Raise the M₁–M₂ correlation to watch a partial indirect effect shrink or flip sign.`,
+      'Holland et al. note that contemporaneous mediators must correlate, which inflates SEs and can change the size or sign of a partial indirect effect. Justify each pathway separately (rec. 3b).');
+  }
+  if(st.structure==='serial'){
+    const omitted=['a2','b1','c'].filter(k=>!P[k].on);
+    item(omitted.length?'warn':'info','Chain direct links',
+      omitted.length?`The chain omits ${omitted.map(k=>SYM[k]+' ('+pathName(k)+')').join(', ')}. Each omission is a full-mediation claim for that segment and needs its own justification and test.`:
+      'All three direct links in the chain are estimated, so every segment is partially mediated. Each direct path needs a rationale based on transmitters left out of the model.',
+      'Even X → M₁ → M₂ → Y contains three possible direct effects; unjustified full mediation often slips in when mediation is embedded in a chain.');
+  }
+  // 4. reliability of product
+  item('info','Measurement',`Measurement error in a product compounds the error in its components. With a dichotomous W measured without error, the reliability of X × W is close to that of X, but continuous moderators need reliabilities near .90 for the reliability of the product to reach about .80.`,'Design rec. 2: use measures low in measurement error; aim for at least .80.');
+  // 5. design
+  item('info','Causal design',`A conditional indirect effect model is a causal model. With cross-sectional, observational data (45% and 78% of models in the review), the causal order of X, M and Y rests on the justification in the introduction.`,'Design rec. 1: experimental or longitudinal designs are preferable.');
+  return out.join('');
+}
+
+/* ---------- path diagram ---------- */
+function diagramSVG(fm,P){
+  const s=st.structure, W=680, H=s==='single'?290:s==='parallel'?370:335;
+  const pos=s==='single'?{0:[90,160],1:[340,50],3:[590,160],Ws:[[340,262]]}:
+            s==='parallel'?{0:[90,190],1:[350,55],2:[350,325],3:[595,190],Ws:[[110,40],[110,340]]}:
+                           {0:[80,230],1:[250,78],2:[430,78],3:[600,230],Ws:[[340,307]]};
+  const bw=150,bh=40;
+  const clip=(c,d)=>{const [cx,cy]=c,[dx,dy]=d; const vx=dx-cx,vy=dy-cy; const t=Math.min(Math.abs((bw/2+4)/(vx||1e-9)),Math.abs((bh/2+4)/(vy||1e-9))); return [cx+vx*t,cy+vy*t];};
+  let edges='',labels='',wlinks=''; const usedW=new Set();
+  const on=Object.keys(P).filter(k=>P[k].on), geo={}, segs=[], boxes=[];
+  on.forEach(k=>{
+    const a=pos[PATHS[k].from], b=pos[PATHS[k].to], p1=clip(a,b), p2=clip(b,a);
+    const mx=(p1[0]+p2[0])/2,my=(p1[1]+p2[1])/2, len=Math.hypot(p2[0]-p1[0],p2[1]-p1[1]); let nx=-(p2[1]-p1[1])/len, ny=(p2[0]-p1[0])/len;
+    if(ny>0||(ny===0&&nx<0)){nx=-nx;ny=-ny;} // label above the line
+    const off=P[k].mod?(k==='d21'?42:30):(k==='d21'?24:14), tx=p1[0]+(p2[0]-p1[0])*.6, ty=p1[1]+(p2[1]-p1[1])*.6, lx=tx+nx*off, ly=ty+ny*off;
+    geo[k]={p1,p2,mx,my,lx,ly}; segs.push([p1,p2]);
+    boxes.push([lx-(P[k].mod?52:36),ly-(P[k].mod?20:8),lx+(P[k].mod?52:36),ly+(P[k].mod?16:8)]);
+  });
+  const segDist=(x,y,[a,b])=>{const vx=b[0]-a[0],vy=b[1]-a[1],t=Math.max(0,Math.min(1,((x-a[0])*vx+(y-a[1])*vy)/(vx*vx+vy*vy||1)));return Math.hypot(x-a[0]-t*vx,y-a[1]-t*vy);};
+  const boxDist=(x,y,[x0,y0,x1,y1])=>Math.hypot(Math.max(x0-x,0,x-x1),Math.max(y0-y,0,y-y1));
+  // W links first, so their segments count when placing every interaction label
+  const wl=[];
+  on.filter(k=>P[k].mod).forEach(k=>{
+    const {mx,my}=geo[k];
+    let wi=0; pos.Ws.forEach((q,i)=>{ if(Math.hypot(q[0]-mx,q[1]-my)<Math.hypot(pos.Ws[wi][0]-mx,pos.Ws[wi][1]-my)) wi=i; }); usedW.add(wi);
+    const w=pos.Ws[wi], wp=clip(w,[mx,my]); wl.push({k,w,wp,mx,my}); segs.push([wp,[mx,my]]);
+  });
+  const nodeBoxes=[...activeVars(st.structure).map(i=>pos[i]),...[...usedW].map(i=>pos.Ws[i])].map(([x,y])=>[x-bw/2,y-bh/2,x+bw/2,y+bh/2]);
+  wl.forEach(({k,w,wp,mx,my})=>{
+    wlinks+=`<line x1="${wp[0]}" y1="${wp[1]}" x2="${mx}" y2="${my}" style="stroke:var(--accent)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ahw)"/>`;
+    const eqW=fm.eqs[fm.byPath[k]], wInt=eqW.b[eqW.idx[k].p], own=[wp,[mx,my]];
+    let best=null;
+    for(const side of [1,-1]) for(let t=.15;t<=.86;t+=.05){
+      const px=wp[0]+(mx-wp[0])*t, py=wp[1]+(my-wp[1])*t, cx=px+side*28;
+      const pts=[[cx-20,py],[cx,py],[cx+20,py]];
+      let sc=Infinity;
+      pts.forEach(([x,y])=>{ segs.forEach(sg=>{ if(sg[0]!==own[0]) sc=Math.min(sc,segDist(x,y,sg)); }); boxes.concat(nodeBoxes).forEach(b=>sc=Math.min(sc,boxDist(x,y,b))); });
+      if(!best||sc>best.sc+.5) best={sc,px,py,cx,side};
+    }
+    boxes.push([best.cx-24,best.py-8,best.cx+24,best.py+8]);
+    labels+=`<text x="${best.px+best.side*7}" y="${best.py+4}" text-anchor="${best.side>0?'start':'end'}" class="lbl"><tspan style="fill:var(--accent);font-weight:500">${fmt(wInt,2)}</tspan></text>`;
+  });
+  on.forEach(k=>{
+    const {p1,p2,lx,ly}=geo[k];
+    edges+=`<line x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" style="stroke:var(--ink)" stroke-width="1.4" marker-end="url(#ah)"/>`;
+    if(P[k].mod){
+      labels+=`<text x="${lx}" y="${ly-7}" text-anchor="middle" class="lbl"><tspan style="fill:var(--muted)">${SYM[k]}  </tspan><tspan style="fill:var(--g0)">W=0: ${fmt(pathAt(fm,k,0),2)}</tspan></text>
+               <text x="${lx}" y="${ly+9}" text-anchor="middle" class="lbl"><tspan style="fill:transparent;stroke:none">${SYM[k]}  </tspan><tspan style="fill:var(--g1)">W=1: ${fmt(pathAt(fm,k,1),2)}</tspan></text>`;
+    } else {
+      labels+=`<text x="${lx}" y="${ly+4}" text-anchor="middle" class="lbl"><tspan style="fill:var(--muted)">${SYM[k]} </tspan><tspan style="fill:var(--ink)">${fmt(pathAt(fm,k,0),2)}</tspan></text>`;
+    }
+  });
+  const anyMod=Object.values(P).some(p=>p.mod);
+  const node=(key,label,sub,style)=>{const [x,y]=Array.isArray(key)?key:pos[key]; return `<g><rect x="${x-bw/2}" y="${y-bh/2}" width="${bw}" height="${bh}" rx="5" style="fill:var(--surface);stroke:${style||'var(--ink)'}" stroke-width="1.3"/>
+    <text x="${x}" y="${y-3}" text-anchor="middle" style="fill:var(--ink);font-size:12.5px;font-weight:600">${esc(label.length>22?label.slice(0,21)+'…':label)}</text>
+    <text x="${x}" y="${y+12}" text-anchor="middle" style="fill:var(--muted);font-size:10.5px;font-family:var(--f-mono)">${sub}</text></g>`;};
+  const av=activeVars(s);
+  const nodes=av.map(i=>node(i,vlab(i),s==='single'&&i===1?'M':VARS[i].replace('1','₁').replace('2','₂'))).join('')+
+     [...usedW].map(i=>node(pos.Ws[i],st.labels.W,`W: 0 = ${esc(st.labels.W0)}, 1 = ${esc(st.labels.W1)}`,'var(--accent)')).join('');
+  return `<svg class="fig" viewBox="0 0 ${W} ${H}" role="img" aria-label="Path diagram with estimated coefficients" style="min-width:560px">
+   <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--ink)"/></marker>
+   <marker id="ahw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker></defs>
+   <style>.lbl{font-family:var(--f-mono);font-size:11.5px;paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}</style>
+   ${wlinks}${edges}${nodes}${labels}</svg>`;
+}
+
+/* ---------- conditional indirect effect chart ---------- */
+function chartSVG(rows){
+  const W=680, rowH=46, top=26, left=210, right=24, H=top+rows.length*rowH+30;
+  let lo=0,hi=0; rows.forEach(r=>r.ci.slice(0,2).forEach(c=>{lo=Math.min(lo,c[0]);hi=Math.max(hi,c[1]);}));
+  const span=hi-lo||1; lo-=span*.06; hi+=span*.06;
+  const step=(()=>{const raw=(hi-lo)/5, m=Math.pow(10,Math.floor(Math.log10(raw))), f=raw/m; return (f<1.5?1:f<3?2:f<7?5:10)*m;})();
+  const x=v=>left+(v-lo)/(hi-lo)*(W-left-right);
+  let g='';
+  for(let t=Math.ceil(lo/step)*step;t<=hi+1e-12;t+=step){const tx=x(t); g+=`<line x1="${tx}" y1="${top-6}" x2="${tx}" y2="${H-24}" style="stroke:var(--line)" stroke-width="1"/><text x="${tx}" y="${H-8}" text-anchor="middle" style="fill:var(--muted);font-size:10.5px;font-family:var(--f-mono)">${fmt(Math.abs(t)<1e-12?0:t,step<.01?3:2)}</text>`;}
+  g+=`<line x1="${x(0)}" y1="${top-6}" x2="${x(0)}" y2="${H-24}" style="stroke:var(--muted)" stroke-width="1.3"/>`;
+  rows.forEach((r,i)=>{
+    const y=top+i*rowH+rowH/2-6;
+    g+=`<text x="${left-12}" y="${y+4}" text-anchor="end" style="fill:${r.direct?'var(--muted)':'var(--ink)'};font-size:12px;${r.total?'font-weight:600':''}">${esc(r.label.length>30?r.label.slice(0,29)+'…':r.label)}</text>`;
+    [0,1].forEach(gi=>{const yy=y+(gi?8:-8), col=`var(--g${gi})`, c=r.ci[gi];
+      g+=`<line x1="${x(c[0])}" y1="${yy}" x2="${x(c[1])}" y2="${yy}" style="stroke:${col}" stroke-width="2"/>
+          <line x1="${x(c[0])}" y1="${yy-4}" x2="${x(c[0])}" y2="${yy+4}" style="stroke:${col}" stroke-width="1.5"/>
+          <line x1="${x(c[1])}" y1="${yy-4}" x2="${x(c[1])}" y2="${yy+4}" style="stroke:${col}" stroke-width="1.5"/>
+          <circle cx="${x(r.v[gi])}" cy="${yy}" r="4.5" style="fill:${col};stroke:var(--surface)" stroke-width="1.5"/>`;});
+  });
+  return `<svg class="fig" viewBox="0 0 ${W} ${H}" role="img" aria-label="Conditional effects with 95% confidence intervals at each level of W" style="min-width:520px">
+    <text x="${left}" y="12" style="fill:var(--muted);font-size:10.5px;letter-spacing:.06em">EFFECT ON ${esc(st.labels.Y.toUpperCase())} PER UNIT OF ${esc(st.labels.X.toUpperCase())}</text>${g}</svg>`;
+}
+
+loadPreset(PRESETS[0]);
+</script>
+
+</body>
+</html>
