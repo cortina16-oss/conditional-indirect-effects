@@ -117,6 +117,8 @@ svg text{font-family:var(--f-body)}
 .mat input.diff,.mat .fixed.diff{background:color-mix(in srgb,var(--green) 26%,var(--surface));border-color:color-mix(in srgb,var(--green) 55%,var(--line))}
 .mat input.same,.mat .fixed.same{background:color-mix(in srgb,var(--red) 14%,var(--surface))}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.cite-box{margin-top:6px;padding:10px 14px;font-size:14px;line-height:1.55;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;max-width:80ch;overflow-wrap:anywhere}
+.cite-box-ref{display:block;margin-top:4px;color:var(--ink)}
 </style>
 
 <style>body{margin:0;font-size:14px}[hidden]{display:none!important}img{max-width:100%}</style>
@@ -129,6 +131,7 @@ svg text{font-family:var(--f-body)}
     <p class="lede">In an indirect effect model, the effect of X on Y is at least partially transmitted by mediator M. Sometimes, one or more paths in this model are moderated, resulting in a <i>conditional indirect effect model</i>. Holland, Shore, &amp; Cortina (2017) call these Models Integrating Mediation and Moderation (MIMMs). If you really want to understand the math underlying these things, look no further than Edwards and Lambert (2007).</p>
     <p class="lede">The purpose of this tool is to illustrate and explain some of the different types of conditional indirect effect model. You can manipulate the values in the input matrices below in order to see what happens to the output. The tool fits the regression equations implied by the model that you specify (with X×W or M×W product terms only on the paths you mark as moderated), then reports the indirect effect of X on Y at W&nbsp;=&nbsp;0 and W&nbsp;=&nbsp;1 and the difference between them. Examples follow the papers discussed in Holland, Shore &amp; Cortina (2017, <i>ORM</i>).</p>
     <p class="lede">Just to keep things manageable, the moderators are assumed to be dichotomous. That way, there can be separate correlation matrices at each level of the moderator. If the moderator is coded 0,1, then the weight for the interaction term is just the difference in slopes between W&nbsp;=&nbsp;1 and W&nbsp;=&nbsp;0. For a continuous moderator, the weight would be the rate of change in the slope per unit increase in W.</p>
+    <div class="cite-box">If you use this tool or any of its output, please cite it as: <span class="cite-box-ref">Cortina, J. M. (2026). <i>Conditional Indirect Effects Explorer</i> (Version 1.0) [Web application]. https://josecortina.com/conditional-indirect-effects</span></div>
   </header>
 
   <div class="grid">
